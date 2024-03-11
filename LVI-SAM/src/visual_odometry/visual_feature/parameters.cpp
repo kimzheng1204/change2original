@@ -32,6 +32,20 @@ int USE_LIDAR;
 int LIDAR_SKIP;
 
 
+//superpoint_config_inset
+int max_keypoints;
+double keypoints_threshold;
+int remove_borders;
+int dla_core;
+
+std::vector<std::string> input_tensor_names;
+std::vector<std::string> output_tensor_names;
+
+std::string onnx_file;
+std::string engine_file;
+
+
+
 void readParameters(ros::NodeHandle &n)
 {
     std::string config_file;
@@ -41,6 +55,10 @@ void readParameters(ros::NodeHandle &n)
     {
         std::cerr << "ERROR: Wrong path to settings" << std::endl;
     }
+
+
+    //用多级的方式打开
+    cv::FileNode file_node;
 
     // project name
     fsSettings["project_name"] >> PROJECT_NAME;
@@ -80,6 +98,34 @@ void readParameters(ros::NodeHandle &n)
         fsSettings["fisheye_mask"] >> mask_name;
         FISHEYE_MASK = pkg_path + mask_name;
     }
+
+
+    //superpoint config
+    file_node = fsSettings["superpoint"]["max_keypoints"];
+    if(!file_node.isNone() && !file_node.empty()){
+        file_node >> max_keypoints;
+    }
+    else{
+        return;
+    }
+
+
+    file_node = fsSettings["superpoint"]["keypoint_threshold"];
+    file_node >> keypoints_threshold;
+    
+
+
+    file_node = fsSettings["superpoint"]["remove_borders"];
+    file_node >> remove_borders;
+
+    
+
+
+
+
+
+
+    
 
     // camera config
     CAM_NAMES.push_back(config_file);

@@ -107,7 +107,7 @@ struct SuperPointConfig{
 
     std::string onnx_file;
     std::string engine_file;
-}
+};
 
 
 void readParameters(ros::NodeHandle &n);
