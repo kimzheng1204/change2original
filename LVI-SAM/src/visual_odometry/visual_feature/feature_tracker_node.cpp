@@ -22,7 +22,7 @@ ros::Publisher pub_match;
 ros::Publisher pub_restart;
 
 // feature tracker variables
-FeatureTracker trackerData[NUM_OF_CAM];
+FeatureTracker trackerData[NUM_OF_CAM]; 
 double first_image_time;
 int pub_count = 1;
 bool first_image_flag = true;
@@ -30,19 +30,28 @@ double last_image_time = 0;
 bool init_pub = 0;
 
 
-
+/**
+ * @brief ROS回调函数，对信赖的图像进行特征点追踪，发布
+ * @details readImage()对信赖的图像使用LK进行特征点追踪
+ *          追踪的特征点封装成feature_points发布到pub_img的话题下
+ *          图像封装成ptr发布在pub_match下
+ * @param   img_msg 输入的图像
+*/
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
     double cur_img_time = img_msg->header.stamp.toSec();
 
+    //判断是否是第一帧
     if(first_image_flag)
     {
         first_image_flag = false;
-        first_image_time = cur_img_time;
+        first_image_time = cur_img_time; //记录第一个图像帧的时间
         last_image_time = cur_img_time;
         return;
     }
-    // detect unstable camera stream
+
+
+    //通过时间间隔判断相机数据流是否稳定，有问题则restart
     if (cur_img_time - last_image_time > 1.0 || cur_img_time < last_image_time)
     {
         ROS_WARN("image discontinue! reset the feature tracker!");
@@ -55,11 +64,15 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         return;
     }
     last_image_time = cur_img_time;
-    // frequency control
+
+
+    //控制发布频率
+    //不是每次读入一帧图像就要发布特征点，判断间隔时间内的发布次数
     if (round(1.0 * pub_count / (cur_img_time - first_image_time)) <= FREQ)
     {
         PUB_THIS_FRAME = true;
-        // reset the frequency control
+        
+        //时间间隔内的发布频率十分接近设定频率时，更新时间间隔起始时刻，并将数据发布次数置0
         if (abs(1.0 * pub_count / (cur_img_time - first_image_time) - FREQ) < 0.01 * FREQ)
         {
             first_image_time = cur_img_time;
@@ -71,7 +84,11 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         PUB_THIS_FRAME = false;
     }
 
+    
     cv_bridge::CvImageConstPtr ptr;
+    
+    
+    //将图像编码8UC1转为mono8
     if (img_msg->encoding == "8UC1")
     {
         sensor_msgs::Image img;
@@ -88,11 +105,13 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
 
     cv::Mat show_img = ptr->image;
+    
     TicToc t_r;
+    
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ROS_DEBUG("processing camera %d", i);
-        if (i != 1 || !STEREO_TRACK)
+        if (i != 1 || !STEREO_TRACK)//单目
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), cur_img_time);
         else
         {
@@ -110,6 +129,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         #endif
     }
 
+    //更新全局ID
     for (unsigned int i = 0;; i++)
     {
         bool completed = false;
@@ -120,6 +140,10 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             break;
     }
 
+   
+   //1、将特征点id，矫正后归一化平面的3D点(x,y,z=1)，像素2D点(u,v)，像素的速度(ux,vy)
+   //封装成sensor_msg::PointCloudPtr类型的feature_points实例中，发布到pub_img;
+   //2、将图像封装到cv_bring::cvtColor类型的ptr实例中，发布到pub_match
    if (PUB_THIS_FRAME)
    {
         pub_count++;
@@ -177,7 +201,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         feature_points->channels.push_back(depth_of_points);
         
         // skip the first image; since no optical speed on frist image
-        if (!init_pub)
+        if (!init_pub)//第一帧不发布
         {
             init_pub = 1;
         }
@@ -196,6 +220,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 cv::Mat tmp_img = stereo_img.rowRange(i * ROW, (i + 1) * ROW);
                 cv::cvtColor(show_img, tmp_img, CV_GRAY2RGB);
 
+                //显示追踪状态，越红越好，越蓝越不行
                 for (unsigned int j = 0; j < trackerData[i].cur_pts.size(); j++)
                 {
                     if (SHOW_TRACK)
@@ -312,12 +337,19 @@ void lidar_callback(const sensor_msgs::PointCloud2ConstPtr& laser_msg)
     *depthCloud = *depthCloudDS;
 }
 
+
+
+
 int main(int argc, char **argv)
 {
     // initialize ROS node
     ros::init(argc, argv, "vins");
     ros::NodeHandle n;
+    
+    //终端输出
     ROS_INFO("\033[1;32m----> Visual Feature Tracker Started.\033[0m");
+
+    //设置logger的级别，只有级别大于或等于level的日志记录消息才会得到处理
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Warn);
     readParameters(n);
 
@@ -349,10 +381,20 @@ int main(int argc, char **argv)
     ros::Subscriber sub_lidar = n.subscribe(POINT_CLOUD_TOPIC, 5,    lidar_callback);
     if (!USE_LIDAR)
         sub_lidar.shutdown();
+    
+    //添加一个读取模型的参数
+    std::string model_dir;
+    ros::param::get("~model_dir",model_dir);
+
 
     // messages to vins estimator
+    //发布feature，跟踪的特征点，给后端优化用
     pub_feature = n.advertise<sensor_msgs::PointCloud>(PROJECT_NAME + "/vins/feature/feature",     5);
+    
+    //发布feature_img，实例ptr，跟踪的特征点图，给RVIZ和调试使用
     pub_match   = n.advertise<sensor_msgs::Image>     (PROJECT_NAME + "/vins/feature/feature_img", 5);
+    
+    //发布restart
     pub_restart = n.advertise<std_msgs::Bool>         (PROJECT_NAME + "/vins/feature/restart",     5);
 
     // two ROS spinners for parallel processing (image and lidar)
