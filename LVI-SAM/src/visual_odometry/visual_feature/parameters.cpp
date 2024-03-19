@@ -100,7 +100,8 @@ void readParameters(ros::NodeHandle &n)
     }
 
 
-    //superpoint config
+    /*****************读取superpoint特征点参数*********************************/
+    //int类型
     file_node = fsSettings["superpoint"]["max_keypoints"];
     if(!file_node.isNone() && !file_node.empty()){
         file_node >> max_keypoints;
@@ -109,24 +110,37 @@ void readParameters(ros::NodeHandle &n)
         return;
     }
 
-
     file_node = fsSettings["superpoint"]["keypoint_threshold"];
     file_node >> keypoints_threshold;
-    
-
 
     file_node = fsSettings["superpoint"]["remove_borders"];
     file_node >> remove_borders;
 
+    file_node = fsSettings["superpoint"]["dla_core"];
+    file_node >> dla_core;
+
+    //string类型
+    file_node = fsSettings["superpoint"]["onnx_file"];
+    file_node >> onnx_file;
+
+    file_node = fsSettings["superpoint"]["engine_file"];
+    file_node >> engine_file;
+
+
+    //vector类型
+    cv::FileNode input = fsSettings["superpoint"]["input_tensor_names"];
+    size_t input_nums = input.size();
+    for(size_t i = 0; i < input_nums ; i++){
+        input_tensor_names.push_back(input[i].operator std::string());
+    }
+
+    cv::FileNode output = fsSettings["superpoint"]["output_tensor_names"];
+    size_t output_nums = output.size();
+    for(size_t i = 0; i < output_nums ; i++){
+        output_tensor_names.push_back(output[i].operator std::string());
+    }
+    /*************************************************************************/
     
-
-
-
-
-
-
-    
-
     // camera config
     CAM_NAMES.push_back(config_file);
 
