@@ -13,7 +13,11 @@
 #include <opencv2/opencv.hpp>
 
 #include "Thirdparty/TensorRTBuffer/include/buffers.h"
-#include "read_configs.h"
+
+/**这里把read_config.h改成了自己的**/
+#include "parameters.h"
+
+//让人怀疑这个是不是转engine的代码的程度
 
 using tensorrt_common::TensorRTUniquePtr;
 
